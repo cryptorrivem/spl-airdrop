@@ -45,7 +45,7 @@ After the airdrop finishes, you can check which transactions went through and ob
 
 This process will obtain and parse all the transactions that were sent from the keypair used.
 
-NOTE: Currently, the process can only manage up to 100 airdrops, need to work on obtaining more of them to avoid rpc rate limiting.
+> Currently, the process can only manage up to 100 airdrops, need to work on obtaining more of them to avoid rpc rate limiting.
 
 ```
 Usage: node aidrop.js sent [options]
@@ -59,4 +59,4 @@ Options:
     -o, --output <path>     output file with the pending balances to be sent, in the format of the extension (json, csv or tsv)
 ```
 
-NOTE: Take note on the `count` option, such value can drift from what was sent vs what should've sent, as there's no way to tell for the process to know which transactions succeded (from the send) and what others are from previous airdrops (or even deposits for the setup for the current airdrop).
+> Take note on the `count` option, such value can drift from what was sent vs what should've sent, as there's no way to tell for the process to know which transactions succeded (from the send) and what others are from previous airdrops (or even deposits for the setup for the current airdrop).
