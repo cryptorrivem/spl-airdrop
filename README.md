@@ -19,7 +19,11 @@ Have all the SOL/SPL in a wallet, use the keypair to sign and pay for fees. The 
 
 ## Building recipients list file
 
-You can create either a JSON, CSV or TSV file with 3 properties: - Recipient (Solana wallet) - Address (SPL mint address or "SOL" for sending SOL) - Amount (decimal value, the tool handles the lamports conversion)
+You can create either a JSON, CSV or TSV file with 3 properties:
+
+- Recipient (Solana wallet)
+- Address (SPL mint address or "SOL" for sending SOL)
+- Amount (decimal value, the tool handles the lamports conversion)
 
 ## Airdrop SOL/SPL
 
