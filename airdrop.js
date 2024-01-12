@@ -2,7 +2,11 @@ const fs = require("fs");
 const {
   web3: { Connection, Keypair },
 } = require("@project-serum/anchor");
-const { clusterApiUrl, PublicKey } = require("@solana/web3.js");
+const {
+  clusterApiUrl,
+  PublicKey,
+  LAMPORTS_PER_SOL,
+} = require("@solana/web3.js");
 const { Command } = require("commander");
 const {
   readListFile,
@@ -39,7 +43,13 @@ program
     "list tsv file containing recipients and amounts"
   )
   .option("-rl, --rate-limit <number>", "concurrent transactions", 5)
-  .action(({ keypair, rpc, env, list, rateLimit }) => {
+  .option(
+    "-b, --bundle-size <int>",
+    "recipients bundled per transaction, max is 10",
+    10
+  )
+  .option("--simulate", "Simulate the transfers", false)
+  .action(({ keypair, rpc, env, list, rateLimit, bundleSize, simulate }) => {
     const connection = getConnection({ rpc, env });
     const wallet = getKeypair(keypair);
     const recipients = readListFile(list);
@@ -64,7 +74,15 @@ program
         );
       }
 
-      await sendAll({ connection, wallet, recipients, rateLimit, decimals });
+      await sendAll({
+        connection,
+        wallet,
+        recipients,
+        rateLimit: parseInt(rateLimit),
+        bundleSize: parseInt(bundleSize),
+        decimals,
+        simulate,
+      });
     })();
   });
 
@@ -117,12 +135,17 @@ program
         .map(({ recipient, address, amount }) => {
           const sent = (
             alreadySent[recipient] || [{ tokenAddress: address, amount: 0 }]
-          ).find((s) => s.tokenAddress === address);
+          ).filter((s) => s.tokenAddress === address);
           return {
             recipient,
-            tokenAddress: sent.tokenAddress,
-            hash: sent.hash,
-            amount: amount - sent.amount,
+            tokenAddress: sent[0].tokenAddress,
+            hash: sent.map((s) => s.hash),
+            amount:
+              (Math.floor(amount * LAMPORTS_PER_SOL) -
+                Math.floor(
+                  sent.reduce((res, s) => res + s.amount, 0) * LAMPORTS_PER_SOL
+                )) /
+              LAMPORTS_PER_SOL,
           };
         })
         .filter((p) => p.amount > 1e-8)
@@ -139,7 +162,12 @@ program
       if (Object.keys(pending).length === 0) {
         console.info("All sent!");
       } else {
-        writeListFile(output, pending);
+        const list = writeListFile(output, pending);
+        console.info(
+          "Pending:",
+          list.reduce((res, p) => res + p.amount, 0),
+          recipients[0].address
+        );
       }
     })();
   });

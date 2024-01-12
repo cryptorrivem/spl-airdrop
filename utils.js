@@ -60,6 +60,7 @@ function writeListFile(file, list) {
     []
   );
   writeFile(file, data);
+  return data;
 }
 
 module.exports = {

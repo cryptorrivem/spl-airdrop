@@ -5,15 +5,14 @@ function parseTransaction(hash, tx) {
     return { hash, notFound: true, transfers: [] };
   }
   const {
-    meta: { postTokenBalances },
+    meta: { preTokenBalances, postTokenBalances },
     transaction: {
       message: { accountKeys, instructions },
     },
   } = tx;
   return {
     hash,
-    valid: true,
-    confirmed: true,
+    valid: !tx.meta.err,
     transfers: instructions.reduce((res, { program, parsed }) => {
       if (!parsed) {
         return res;
@@ -35,17 +34,17 @@ function parseTransaction(hash, tx) {
           const accountIx = accountKeys.findIndex(
             (a) => a.pubkey.toBase58() === info.destination
           );
-          const tokenInfo = postTokenBalances.find(
-            (t) => t.accountIndex === accountIx
-          );
+          const tokenInfo =
+            postTokenBalances.find((t) => t.accountIndex === accountIx) ||
+            preTokenBalances.find((t) => t.accountIndex === accountIx);
           return [
             ...res,
             {
               from: info.authority,
-              to: tokenInfo.owner,
-              tokenAddress: tokenInfo.mint,
+              to: tokenInfo?.owner,
+              tokenAddress: tokenInfo?.mint,
               amount: parseInt(info.amount),
-              decimals: tokenInfo.uiTokenAmount.decimals,
+              decimals: tokenInfo?.uiTokenAmount.decimals,
             },
           ];
         }
@@ -68,7 +67,10 @@ async function getTransactions({ connection, address, count }) {
     );
     const result = await connection.getParsedTransactions(
       signatures.map((s) => s.signature),
-      finality
+      {
+        commitment: finality,
+        maxSupportedTransactionVersion: 0,
+      }
     );
     const validTransactions = result
       .map((tx, ix) => parseTransaction(signatures[ix].signature, tx))
