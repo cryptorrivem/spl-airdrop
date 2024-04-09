@@ -225,6 +225,8 @@ export async function sendAll({
             }),
           ]);
           console.info(recipients, "=>", signature);
+        } catch (err) {
+          console.error(err);
         } finally {
           result.end = true;
         }
