@@ -1,14 +1,20 @@
-const fs = require("fs");
-const { TSV, CSV } = require("tsv");
+import fs from "fs";
+import { TSV, CSV } from "tsv";
 
-const SOL_ADDRESS = "SOL";
-const SOL_DECIMALS = 9;
+export const SOL_ADDRESS = "SOL";
+export const SOL_DECIMALS = 9;
 
-function getExtension(file) {
+export function getExtension(file: string) {
   return file.substring(file.lastIndexOf(".") + 1);
 }
 
-function readFile(file) {
+export type Airdrop = {
+  recipient: string;
+  address: string;
+  amount: number;
+};
+
+function readFile(file: string): (Airdrop & { amount: string })[] {
   const extension = getExtension(file);
   const text = fs.readFileSync(file, "utf-8");
   switch (extension) {
@@ -19,9 +25,10 @@ function readFile(file) {
     case "json":
       return JSON.parse(text);
   }
+  throw new Error("Unsupported file");
 }
 
-function readListFile(file) {
+export function readListFile(file: string) {
   const rows = readFile(file);
   return rows.map(({ recipient, address, amount }) => ({
     recipient,
@@ -30,7 +37,7 @@ function readListFile(file) {
   }));
 }
 
-function writeFile(file, data) {
+function writeFile(file: string, data: any) {
   const extension = getExtension(file);
   let text;
   switch (extension) {
@@ -43,12 +50,17 @@ function writeFile(file, data) {
     case "json":
       text = JSON.stringify(data, null, 2);
       break;
+    default:
+      throw new Error("Unsupported file");
   }
   fs.writeFileSync(file, text, "utf-8");
 }
 
-function writeListFile(file, list) {
-  const data = Object.keys(list).reduce(
+export function writeListFile(
+  file: string,
+  list: Record<string, { amount: number; tokenAddress: string }[]>
+) {
+  const data = Object.keys(list).reduce<Airdrop[]>(
     (res, recipient) => [
       ...res,
       ...list[recipient].map(({ amount, tokenAddress }) => ({
@@ -63,10 +75,15 @@ function writeListFile(file, list) {
   return data;
 }
 
-module.exports = {
-  SOL_ADDRESS,
-  SOL_DECIMALS,
-  getExtension,
-  readListFile,
-  writeListFile,
-};
+export function batch<T>(array: T[], size: number): T[][] {
+  let result: T[][] = [];
+  while (array.length > 0) {
+    result = [...result, array.slice(0, size)];
+    array = array.slice(size);
+  }
+  return result;
+}
+
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

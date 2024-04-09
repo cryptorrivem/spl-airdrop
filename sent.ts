@@ -1,13 +1,32 @@
-const { getTransactions } = require("./solana");
+import { Connection, PublicKey } from "@solana/web3.js";
+import { getTransactions } from "./solana";
+import { Airdrop } from "./utils";
 
-module.exports = async function ({ connection, address, recipients, count }) {
+interface SentParams {
+  connection: Connection;
+  address: PublicKey;
+  recipients: Airdrop[];
+  count: number;
+}
+
+export type Sent = Record<
+  string,
+  { hash: string[]; tokenAddress: string; amount: number }[]
+>;
+
+export default async function sent({
+  connection,
+  address,
+  recipients,
+  count,
+}: SentParams) {
   const transactions = await getTransactions({
     connection,
     address,
     count,
   });
   const transfers = transactions
-    .filter(({ hash, transfers }, ix) => {
+    .filter(({ hash, transfers, signers }, ix) => {
       const result = transfers.filter(
         (tf) =>
           tf.from === address.toBase58() &&
@@ -16,19 +35,19 @@ module.exports = async function ({ connection, address, recipients, count }) {
           )
       );
       if (result.length === 0) {
-        console.info("ignoring #", ix, hash, transfers);
+        console.info("ignoring #", ix, hash, transfers, signers);
       }
       return result.length > 0;
     })
-    .reduce(
+    .reduce<Sent>(
       (res, { hash, transfers }) =>
-        transfers.reduce(
+        transfers.reduce<Sent>(
           (res, { to, tokenAddress, amount, decimals }) => ({
             ...res,
             [to]: [
               ...(res[to] || []),
               {
-                hash,
+                hash: [hash!],
                 tokenAddress,
                 amount: amount / 10 ** decimals,
               },
@@ -40,4 +59,4 @@ module.exports = async function ({ connection, address, recipients, count }) {
     );
 
   return transfers;
-};
+}

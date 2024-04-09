@@ -1,34 +1,35 @@
-const fs = require("fs");
-const {
-  web3: { Connection, Keypair },
-} = require("@project-serum/anchor");
-const {
-  clusterApiUrl,
-  PublicKey,
-  LAMPORTS_PER_SOL,
-} = require("@solana/web3.js");
-const { Command } = require("commander");
-const {
+import { Command } from "commander";
+import fs from "fs";
+import {
   readListFile,
   writeListFile,
   SOL_ADDRESS,
   SOL_DECIMALS,
   getExtension,
-} = require("./utils");
-const sent = require("./sent");
-const { sendAll } = require("./send");
+} from "./utils";
+import sent, { Sent } from "./sent";
+import { sendAll } from "./send";
+import {
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  ParsedAccountData,
+  PublicKey,
+} from "@solana/web3.js";
+
 const program = new Command();
 
 program.name("airdrop").description("Custom airdrop tool");
 
-function getConnection({ rpc, env }) {
-  return new Connection(rpc || clusterApiUrl(env), {
-    confirmTransactionInitialTimeout: 90000,
+function getConnection(rpc: string) {
+  return new Connection(rpc, {
+    commitment: "confirmed",
+    confirmTransactionInitialTimeout: 60000,
   });
 }
-function getKeypair(file) {
+function getKeypair(file: string) {
   return Keypair.fromSecretKey(
-    new Uint8Array(JSON.parse(fs.readFileSync(file)))
+    new Uint8Array(JSON.parse(fs.readFileSync(file, "utf-8")))
   );
 }
 
@@ -37,54 +38,62 @@ program
   .description("Send from keypair wallet to recipients from list")
   .requiredOption("-k, --keypair <path>", "keypair to send from")
   .option("-r, --rpc <string>", "rpc to use")
-  .option("-e, --env <string>", "environment to use")
   .requiredOption(
     "-l, --list <path>",
     "list tsv file containing recipients and amounts"
   )
-  .option("-rl, --rate-limit <number>", "concurrent transactions", 5)
+  .option(
+    "-p, --priority-fees <number>",
+    "priority fees in microlamports",
+    "10000"
+  )
+  .option("-rl, --rate-limit <number>", "concurrent transactions", "5")
   .option(
     "-b, --bundle-size <int>",
     "recipients bundled per transaction, max is 10",
-    10
+    "10"
   )
   .option("--simulate", "Simulate the transfers", false)
-  .action(({ keypair, rpc, env, list, rateLimit, bundleSize, simulate }) => {
-    const connection = getConnection({ rpc, env });
-    const wallet = getKeypair(keypair);
-    const recipients = readListFile(list);
+  .action(
+    ({ keypair, rpc, list, priorityFees, rateLimit, bundleSize, simulate }) => {
+      const connection = getConnection(rpc);
+      const wallet = getKeypair(keypair);
+      const recipients = readListFile(list);
 
-    (async function () {
-      const addresses = Array.from(
-        new Set(recipients.map((r) => r.address))
-      ).filter((a) => a !== SOL_ADDRESS);
-      let decimals = { [SOL_ADDRESS]: SOL_DECIMALS };
-      if (addresses.length > 0) {
-        const infos = await Promise.all(
-          addresses.map((a) =>
-            connection.getParsedAccountInfo(new PublicKey(a))
-          )
-        );
-        decimals = infos.reduce(
-          (res, i, ix) => ({
-            ...res,
-            [addresses[ix]]: i.value.data.parsed.info.decimals,
-          }),
-          decimals
-        );
-      }
+      (async function () {
+        const addresses = Array.from(
+          new Set(recipients.map((r) => r.address))
+        ).filter((a) => a !== SOL_ADDRESS);
+        let decimals = { [SOL_ADDRESS]: SOL_DECIMALS };
+        if (addresses.length > 0) {
+          const infos = await Promise.all(
+            addresses.map((a) =>
+              connection.getParsedAccountInfo(new PublicKey(a))
+            )
+          );
+          decimals = infos.reduce(
+            (res, i, ix) => ({
+              ...res,
+              [addresses[ix]]: (i.value!.data as ParsedAccountData).parsed.info
+                .decimals,
+            }),
+            decimals
+          );
+        }
 
-      await sendAll({
-        connection,
-        wallet,
-        recipients,
-        rateLimit: parseInt(rateLimit),
-        bundleSize: parseInt(bundleSize),
-        decimals,
-        simulate,
-      });
-    })();
-  });
+        await sendAll({
+          connection,
+          wallet,
+          recipients,
+          priorityFees: parseInt(priorityFees),
+          rateLimit: parseInt(rateLimit),
+          bundleSize: parseInt(bundleSize),
+          decimals,
+          simulate,
+        });
+      })();
+    }
+  );
 
 program
   .command("sent")
@@ -93,7 +102,6 @@ program
   )
   .requiredOption("-k, --keypair <path>", "keypair to send from")
   .option("-r, --rpc <string>", "rpc to use")
-  .option("-e, --env <string>", "environment to use")
   .requiredOption(
     "-l, --list <path>",
     "list tsv file containing recipients and amounts that should've been sent"
@@ -107,9 +115,9 @@ program
     "list tsv file containing recipients and amounts pending"
   )
   .option("-c, --count <int>", "last nth transactions")
-  .action(({ keypair, rpc, env, list, sentList, output, count }) => {
+  .action(({ keypair, rpc, list, sentList, output, count }) => {
     (async function () {
-      const connection = getConnection({ rpc, env });
+      const connection = getConnection(rpc);
       const address = getKeypair(keypair).publicKey;
       const recipients = readListFile(list);
 
@@ -139,7 +147,7 @@ program
           return {
             recipient,
             tokenAddress: sent[0].tokenAddress,
-            hash: sent.map((s) => s.hash),
+            hash: sent.flatMap((s) => s.hash),
             amount:
               (Math.floor(amount * LAMPORTS_PER_SOL) -
                 Math.floor(
@@ -149,7 +157,7 @@ program
           };
         })
         .filter((p) => p.amount > 1e-8)
-        .reduce(
+        .reduce<Sent>(
           (res, { recipient, tokenAddress, hash, amount }) => ({
             ...res,
             [recipient]: [
